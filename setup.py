@@ -8,8 +8,8 @@ setup(
   description = 'Devebot Opflow for Python',
   author = 'Devebot Team',
   author_email = 'contact@devebot.com',
-  url = 'https://github.com/devebot/opflow-python',
-  download_url = 'https://github.com/devebot/opflow-python/archive/0.1.0.tar.gz',
+  url = 'https://github.com/opflow/opflow-python',
+  download_url = 'https://github.com/opflow/opflow-python/archive/0.1.0.tar.gz',
   keywords = ['devebot', 'opflow', 'amqplib'],
   classifiers = [],
 )
