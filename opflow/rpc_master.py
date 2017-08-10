@@ -27,12 +27,17 @@ class RpcMaster:
 
         if (options is None): options = {}
 
-        if (self.__responseConsumer is None):
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug('request() init new ResponseConsumer')
-            self.__responseConsumer = self.__initResponseConsumer(False)
-        
-        consumerInfo = self.__responseConsumer
+        forked = ('mode' in options and options['mode'] == 'forked')
+
+        consumerInfo = None
+        if forked:
+            consumerInfo = self.__initResponseConsumer(True)
+        else:
+            if (self.__responseConsumer is None):
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('request() create new ResponseConsumer')
+                self.__responseConsumer = self.__initResponseConsumer(False)
+            consumerInfo = self.__responseConsumer
 
         taskId = Util.getUUID()
 
@@ -46,8 +51,10 @@ class RpcMaster:
                     logger.debug('completeListener will be invoked')
                 del self.__tasks[taskId]
                 if len(self.__tasks) == 0:
-                    if logger.isEnabledFor(logging.DEBUG): logger.debug('tasks is empty')
+                    if forked:
+                        self.__engine.cancelConsumer(consumerInfo)
                     self.__idle.notify()
+                    if logger.isEnabledFor(logging.DEBUG): logger.debug('tasks is empty')
             finally:
                 self.__lock.release()
 
@@ -160,9 +167,5 @@ class RpcRequest:
         status = None
         if ('headers' in message and message['headers'] is not None):
             headers = message['headers']
-            if ('status' in headers):
-                status = headers['status']
-        if (status in ['failed', 'completed']):
-            return True
-        else:
-            return False
+            if ('status' in headers): status = headers['status']
+        return (status in ['failed', 'completed'])

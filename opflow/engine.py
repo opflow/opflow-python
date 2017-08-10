@@ -12,9 +12,9 @@ logger = Util.getLogger(__name__)
 
 class Engine:
     def __init__(self, params):
-        self.uri = params['uri']
+        self.__uri = params['uri']
 
-        self.__connection = pika.BlockingConnection(pika.URLParameters(self.uri))
+        self.__connection = pika.BlockingConnection(pika.URLParameters(self.__uri))
         self.__channel = None
         self.__thread = None
 
