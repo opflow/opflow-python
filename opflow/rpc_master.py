@@ -2,9 +2,10 @@
 
 import logging
 import pika
-import time
-import uuid
 import Queue
+import time
+import threading
+import uuid
 
 from engine import Engine
 from util import Util
@@ -14,9 +15,10 @@ logger = Util.getLogger(__name__)
 class RpcMaster:
     def __init__(self, params):
         if logger.isEnabledFor(logging.DEBUG): logger.debug('Constructor begin ...')
+        self.__lock = threading.RLock()
+        self.__idle = threading.Condition(self.__lock)
         self.__engine = Engine(params)
         self.__tasks = {}
-        self.__consumerInfo = None
         self.__responseConsumer = None
         self.__responseName = params['responseName']
 
@@ -29,7 +31,8 @@ class RpcMaster:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug('request() init new ResponseConsumer')
             self.__responseConsumer = self.__initResponseConsumer(False)
-        self.__consumerInfo = self.__responseConsumer
+        
+        consumerInfo = self.__responseConsumer
 
         taskId = Util.getUUID()
 
@@ -37,11 +40,16 @@ class RpcMaster:
             logger.debug('request() - new taskId: %s' % (taskId))
 
         def completeListener():
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug('completeListener has been invoked')
-            del self.__tasks[taskId]
-            if len(self.__tasks) == 0:
-                if logger.isEnabledFor(logging.DEBUG): logger.debug('tasks is empty')
+            self.__lock.acquire()
+            try:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('completeListener will be invoked')
+                del self.__tasks[taskId]
+                if len(self.__tasks) == 0:
+                    if logger.isEnabledFor(logging.DEBUG): logger.debug('tasks is empty')
+                    self.__idle.notify()
+            finally:
+                self.__lock.release()
 
         if (routineId is not None):
             if logger.isEnabledFor(logging.DEBUG):
@@ -51,10 +59,12 @@ class RpcMaster:
         task = RpcRequest(options, completeListener)
         self.__tasks[taskId] = task
 
-        replyTo = self.__consumerInfo['queueName']
-
         headers = { 'routineId': task.routineId, 'requestId': task.requestId }
-        properties = {'correlation_id': taskId, 'headers': headers, 'reply_to': replyTo}
+        properties = { 'headers': headers, 'correlation_id': taskId }
+        
+        if not consumerInfo['fixedQueue']:
+            properties['reply_to'] = consumerInfo['queueName']
+
         self.__engine.produce(message=content, properties=properties)
 
         return task
@@ -89,9 +99,14 @@ class RpcMaster:
         return self.__engine.consume(callback, options)
 
     def close(self):
-        if self.__consumerInfo is not None:
-            self.__engine.cancelConsumer(self.__consumerInfo)
-        self.__engine.close()
+        self.__lock.acquire()
+        try:
+            while len(self.__tasks) > 0: self.__idle.wait()
+            if self.__responseConsumer is not None:
+                self.__engine.cancelConsumer(self.__responseConsumer)
+            self.__engine.close()
+        finally:
+            self.__lock.release()
 
 class RpcRequest:
     EMPTY = { 'status': 'EMPTY' }
