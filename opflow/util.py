@@ -8,17 +8,26 @@ ch.setLevel(logging.DEBUG)
 ch.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
 
 class Util(object):
-    @staticmethod
-    def getRoutineId(headers):
-        if (headers is None or 'routineId' not in headers):
-            return None
-        return headers['routineId']
+    @classmethod
+    def getRoutineId(cls, headers, uuidIfNotFound=False):
+        return cls.getHeaderField(headers, 'routineId', uuidIfNotFound)
 
-    @staticmethod
-    def getRequestId(headers):
-        if (headers is None or 'requestId' not in headers):
-            return str(uuid.uuid4())
-        return headers['requestId']
+    @classmethod
+    def getRequestId(cls, headers, uuidIfNotFound=True):
+        return cls.getHeaderField(headers, 'requestId', uuidIfNotFound)
+    
+    @classmethod
+    def getHeaderField(cls, headers, fieldName, uuidIfNotFound=True):
+        if (headers is None or fieldName not in headers):
+            if uuidIfNotFound:
+                return cls.getUUID()
+            else:
+                return None
+        return headers[fieldName]
+
+    @classmethod
+    def getUUID(cls):
+        return str(uuid.uuid4())
 
     @staticmethod
     def getLogger(name):
