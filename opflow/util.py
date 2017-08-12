@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import time
 import uuid
 
 ch = logging.StreamHandler()
@@ -28,6 +29,10 @@ class Util(object):
     @classmethod
     def getUUID(cls):
         return str(uuid.uuid4())
+
+    @classmethod
+    def getCurrentTime(cls):
+        return time.time()
 
     @staticmethod
     def getLogger(name):

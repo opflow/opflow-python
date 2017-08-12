@@ -2,6 +2,7 @@
 
 import logging
 import pika
+import time
 
 from engine import Engine
 from util import Util
@@ -73,8 +74,17 @@ class RpcWorker:
 
     def close(self):
         if self.__consumerInfo is not None:
+            if logger.isEnabledFor(logging.DEBUG): logger.debug('Consumer is cancelling')
             self.__engine.cancelConsumer(self.__consumerInfo)
-        self.__engine.close()
+        if self.__engine is not None:
+            if logger.isEnabledFor(logging.DEBUG): logger.debug('Engine is closing')
+            self.__engine.close()
+
+    def retain(self):
+        if self.__engine is not None:
+            while self.__engine.consumingLoop is not None and self.__engine.consumingLoop.is_alive():
+                if logger.isEnabledFor(logging.DEBUG): logger.debug('waiting for consumingLoop')
+                self.__engine.consumingLoop.join(1)
 
 class RpcResponse:
     def __init__(self, channel, properties, workerTag, body, replyToName):

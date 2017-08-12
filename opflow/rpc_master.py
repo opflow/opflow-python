@@ -8,6 +8,7 @@ import threading
 import uuid
 
 from engine import Engine
+from task import TimeoutHandler
 from util import Util
 
 logger = Util.getLogger(__name__)
@@ -21,6 +22,28 @@ class RpcMaster:
         self.__tasks = {}
         self.__responseConsumer = None
         self.__responseName = params['responseName']
+        self.__timeoutHandler = None
+
+        if 'monitorEnabled' in params and type(params['monitorEnabled']) is bool:
+            self.__monitorEnabled = params['monitorEnabled']
+        else:
+            self.__monitorEnabled = True
+
+        if 'monitorId' in params:
+            self.__monitorId = params['monitorId']
+        else:
+            self.__monitorId = Util.getUUID()
+
+        if 'monitorInterval' in params and type(params['monitorInterval']) is int:
+            self.__monitorInterval = params['monitorInterval']
+        else:
+            self.__monitorInterval = 1
+
+        if 'monitorTimeout' in params and type(params['monitorTimeout']) is int:
+            self.__monitorTimeout = params['monitorTimeout']
+        else:
+            self.__monitorTimeout = 0
+
 
     def request(self, routineId, content, options=None):
         if logger.isEnabledFor(logging.DEBUG): logger.debug('request() is invoked')
@@ -28,6 +51,15 @@ class RpcMaster:
         if (options is None): options = {}
 
         forked = ('mode' in options and options['mode'] == 'forked')
+
+        if self.__monitorEnabled and self.__timeoutHandler is None:
+            self.__timeoutHandler = TimeoutHandler(tasks=self.__tasks,
+                monitorId=self.__monitorId,
+                interval=self.__monitorInterval,
+                timeout=self.__monitorTimeout)
+            self.__timeoutHandler.start()
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug('timeoutHandler[%s] has been started' % (self.__monitorId))
 
         consumerInfo = None
         if forked:
@@ -111,9 +143,19 @@ class RpcMaster:
             while len(self.__tasks) > 0: self.__idle.wait()
             if self.__responseConsumer is not None:
                 self.__engine.cancelConsumer(self.__responseConsumer)
+            if self.__timeoutHandler is not None:
+                self.__timeoutHandler.stop()
             self.__engine.close()
         finally:
             self.__lock.release()
+
+    def retain(self):
+        if self.__timeoutHandler is not None:
+            while self.__timeoutHandler.timer is not None and self.__timeoutHandler.timer.is_alive():
+                self.__timeoutHandler.timer.join(1)
+        if self.__engine is not None:
+            while self.__engine.consumingLoop is not None and self.__engine.consumingLoop.is_alive():
+                self.__engine.consumingLoop.join(1)
 
 class RpcRequest:
     EMPTY = { 'status': 'EMPTY' }
@@ -123,8 +165,12 @@ class RpcRequest:
         if logger.isEnabledFor(logging.DEBUG): logger.debug('RpcRequest constructor begin')
         self.__requestId = Util.getRequestId(options, True)
         self.__routineId = Util.getRoutineId(options, True)
-        self.__timeout = None
-        self.__timestamp = time.time()
+        self.__timeout = 0
+        if 'timeout' in options:
+            timeout = options['timeout']
+            if (type(timeout) is int or type(timeout) is long) and timeout > 0:
+                self.__timeout = timeout
+        self.__timestamp = Util.getCurrentTime()
         self.__completeListener = callback
         self.__list = Queue.Queue()
 
@@ -139,6 +185,14 @@ class RpcRequest:
     @property
     def timestamp(self):
         return self.__timestamp
+
+    @property
+    def timeout(self):
+        return self.__timeout
+
+    def raiseTimeout(self):
+        self.__list.put(self.ERROR, True)
+        self.__list.join()
 
     def hasNext(self):
         self.__current = self.__list.get()
@@ -157,10 +211,6 @@ class RpcRequest:
         if (self.__isDone(message)):
             self.__list.put(self.EMPTY, True)
             if (callable(self.__completeListener)): self.__completeListener()
-        self.__list.join()
-
-    def exit(self):
-        self.__list.put(self.ERROR, True)
         self.__list.join()
 
     def __isDone(self, message):

@@ -6,47 +6,54 @@ import pika
 import threading
 import time
 
+from exception import ConstructorError
 from util import Util
 
 logger = Util.getLogger(__name__)
 
 class Engine:
     def __init__(self, params):
-        self.__uri = params['uri']
-
-        self.__connection = pika.BlockingConnection(pika.URLParameters(self.__uri))
-        self.__channel = None
-        self.__thread = None
-
-        if ('exchange_name' in params):
-            self.exchange_name = params['exchange_name']
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug('exchange_name value: %s' % self.exchange_name)
+        if 'uri' in params and type(params['uri']) is str and params['uri'] is not None:
+            self.__uri = params['uri']
         else:
-            self.exchange_name = None
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug('exchange_name is empty')
+            raise ConstructorError('"uri" not found or not a string')
 
-        if ('exchange_type' in params):
-            self.exchange_type = params['exchange_type']
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug('exchange_type value: %s' % self.exchange_type)
-        else:
-            self.exchange_type = 'direct'
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug('exchange_type is empty, use default')
+        try:
+            self.__connection = pika.BlockingConnection(pika.URLParameters(self.__uri))
+            self.__channel = None
+            self.__thread = None
 
-        if (self.exchange_name != None and self.exchange_type != None):
-            channel = self.__getChannel()
-            channel.exchange_declare(exchange=self.exchange_name, type=self.exchange_type, durable=True)
-        
-        if ('routing_key' in params):
-            self.routing_key = params['routing_key']
+            if ('exchange_name' in params):
+                self.exchange_name = params['exchange_name']
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('exchange_name value: %s' % self.exchange_name)
+            else:
+                self.exchange_name = None
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('exchange_name is empty')
 
-        if ('applicationId' in params):
-            self.__applicationId = params['applicationId']
-        else:
-            self.__applicationId = None
+            if ('exchange_type' in params):
+                self.exchange_type = params['exchange_type']
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('exchange_type value: %s' % self.exchange_type)
+            else:
+                self.exchange_type = 'direct'
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('exchange_type is empty, use default')
+
+            if (self.exchange_name != None and self.exchange_type != None):
+                channel = self.__getChannel()
+                channel.exchange_declare(exchange=self.exchange_name, type=self.exchange_type, durable=True)
+            
+            if ('routing_key' in params):
+                self.routing_key = params['routing_key']
+
+            if ('applicationId' in params):
+                self.__applicationId = params['applicationId']
+            else:
+                self.__applicationId = None
+        except:
+            raise ConstructorError('Error on connecting')
 
     def produce(self, message, properties, override=None):
         if (self.__applicationId is not None):
@@ -133,22 +140,29 @@ class Engine:
 
     def close(self):
         self.__stop_consuming()
-        if self.__connection is not None:
+        if self.__connection is not None and self.__connection.is_open:
             self.__connection.close()
 
+    @property
+    def consumingLoop(self):
+        return self.__thread
+
+    def is_alive(self):
+        return self.__thread is not None and self.__thread.is_alive()
+
     def __getChannel(self):
-        if (self.__channel is None):
+        if self.__channel is None:
             self.__channel = self.__connection.channel()
         return self.__channel
 
     def __start_consuming(self):
         def startConsumer():
-            #if logger.isEnabledFor(logging.DEBUG):
+            # if logger.isEnabledFor(logging.DEBUG):
             #    logger.debug('invoke connection.process_data_events()')
             self.__connection.process_data_events(0.01)
 
         if self.__thread is None:
-            self.__thread = StoppableThread(target=startConsumer)
+            self.__thread = StoppableThread(target=startConsumer,name='ConsumingThread')
             self.__thread.start()
 
     def __stop_consuming(self):
@@ -159,17 +173,18 @@ class Engine:
 
 class StoppableThread(threading.Thread):
     """Thread class with a stop() method. The thread itself has to check
-    regularly for the stopped() condition."""
+    regularly for the stopped condition."""
 
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
         super(StoppableThread, self).__init__(group, target, name, args, kwargs)
         self.__target = target
         self.__args = args
+        self.__kwargs = kwargs
         self.__stop_event = threading.Event()
 
     def run(self):
         while not self.__stop_event.is_set():
-            self.__target(*(self.__args))
+            self.__target(*self.__args, **self.__kwargs)
 
     def stop(self):
         if logger.isEnabledFor(logging.DEBUG):
