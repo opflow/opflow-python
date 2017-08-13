@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 __title__ = 'opflow'
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 __author__ = 'Devebot'
 __email__ = 'contact@devebot.com'
 __license__ = 'MIT'

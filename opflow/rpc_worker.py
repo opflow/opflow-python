@@ -6,6 +6,8 @@ import time
 
 from engine import Engine
 from util import Util
+from exception import ConstructorError
+from exception import OperationError
 
 logger = Util.getLogger(__name__)
 
@@ -26,6 +28,9 @@ class RpcWorker:
 
         self.__middlewares = []
         self.__consumerInfo = None
+
+        if self.__operatorName is None:
+            raise ConstructorError('operatorName should not be empty')
 
         if logger.isEnabledFor(logging.DEBUG): logger.debug('Constructor end!')
 

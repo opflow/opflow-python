@@ -66,9 +66,6 @@ class TimeoutHandler:
     def timer(self):
         return self.__timer
 
-    def is_alive(self):
-        return self.__timer is not None and self.__timer.is_alive()
-
 class RepeatedTimer(threading.Thread):
     """Repeat `target` every `interval` seconds."""
     def __init__(self, interval, target, args=(), kwargs={}, name=None):

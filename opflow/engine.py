@@ -7,6 +7,7 @@ import threading
 import time
 
 from exception import ConstructorError
+from exception import OperationError
 from util import Util
 
 logger = Util.getLogger(__name__)
@@ -24,49 +25,48 @@ class Engine:
             self.__thread = None
 
             if ('exchange_name' in params):
-                self.exchange_name = params['exchange_name']
+                self.__exchangeName = params['exchange_name']
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('exchange_name value: %s' % self.exchange_name)
+                    logger.debug('exchange_name value: %s' % self.__exchangeName)
             else:
-                self.exchange_name = None
+                self.__exchangeName = None
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('exchange_name is empty')
 
             if ('exchange_type' in params):
-                self.exchange_type = params['exchange_type']
+                self.__exchangeType = params['exchange_type']
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('exchange_type value: %s' % self.exchange_type)
+                    logger.debug('exchange_type value: %s' % self.__exchangeType)
             else:
-                self.exchange_type = 'direct'
+                self.__exchangeType = 'direct'
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('exchange_type is empty, use default')
 
-            if (self.exchange_name != None and self.exchange_type != None):
+            if (self.__exchangeName != None and self.__exchangeType != None):
                 channel = self.__getChannel()
-                channel.exchange_declare(exchange=self.exchange_name, type=self.exchange_type, durable=True)
+                channel.exchange_declare(exchange=self.__exchangeName, type=self.__exchangeType, durable=True)
             
             if ('routing_key' in params):
-                self.routing_key = params['routing_key']
+                self.__routingKey = params['routing_key']
 
             if ('applicationId' in params):
                 self.__applicationId = params['applicationId']
             else:
                 self.__applicationId = None
         except:
-            raise ConstructorError('Error on connecting')
+            raise ConstructorError('Error on connecting or exchange declaration')
 
     def produce(self, message, properties, override=None):
         if (self.__applicationId is not None):
             properties['app_id'] = self.__applicationId
         basicProperties = pika.spec.BasicProperties(**properties)
         self.__channel.basic_publish(body=message, properties=basicProperties,
-                exchange=self.exchange_name, routing_key=self.routing_key)
+                exchange=self.__exchangeName, routing_key=self.__routingKey)
 
     def consume(self, callback, options):
         _channel = None
         if ('forceNewChannel' in options and options['forceNewChannel']):
             _channel = self.__connection.channel()
-            self.__channels.append(_channel)
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug('forceNewChannel is True, create new channel')
         else:
@@ -87,9 +87,9 @@ class Engine:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug('_queueName after run queue_declare(): %s' % _queueName)
 
-        if (('binding' not in options or options['binding'] != False) and (self.exchange_name != None)):
-            self.__channel.queue_bind(exchange=self.exchange_name,
-                routing_key=self.routing_key, queue=_queueName)
+        if (('binding' not in options or options['binding'] != False) and (self.__exchangeName != None)):
+            self.__channel.queue_bind(exchange=self.__exchangeName,
+                routing_key=self.__routingKey, queue=_queueName)
 
         _replyToName = None
         if ('replyTo' in options and options['replyTo'] is not None):
@@ -146,9 +146,6 @@ class Engine:
     @property
     def consumingLoop(self):
         return self.__thread
-
-    def is_alive(self):
-        return self.__thread is not None and self.__thread.is_alive()
 
     def __getChannel(self):
         if self.__channel is None:
