@@ -8,6 +8,7 @@ import threading
 import uuid
 
 from engine import Engine
+from executor import Executor
 from task import TimeoutHandler
 from util import Util
 
@@ -19,10 +20,16 @@ class RpcMaster:
         self.__lock = threading.RLock()
         self.__idle = threading.Condition(self.__lock)
         self.__engine = Engine(params)
+        self.__executor = Executor({ 'engine': self.__engine })
         self.__tasks = {}
-        self.__responseConsumer = None
-        self.__responseName = params['responseName']
         self.__timeoutHandler = None
+        self.__responseConsumer = None
+
+        if 'responseName' in params and type(params['responseName']) is str:
+            self.__responseName = params['responseName']
+            self.__executor.assertQueue(self.__responseName)
+        else:
+            self.__responseName = None
 
         if 'monitorEnabled' in params and type(params['monitorEnabled']) is bool:
             self.__monitorEnabled = params['monitorEnabled']
@@ -125,6 +132,8 @@ class RpcMaster:
             task.push({ 'content': body, 'headers': properties.headers })
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug('responseConsumer - task[%s] message enqueued' % (taskId))
+
+            return True
         
         options = { 'binding': False, 'prefetch': 1 }
         if (not forked):
@@ -156,6 +165,10 @@ class RpcMaster:
         if self.__engine is not None:
             while self.__engine.consumingLoop is not None and self.__engine.consumingLoop.is_alive():
                 self.__engine.consumingLoop.join(1)
+
+    @property
+    def executor(self):
+        return self.__executor
 
 class RpcRequest:
     EMPTY = { 'status': 'EMPTY' }

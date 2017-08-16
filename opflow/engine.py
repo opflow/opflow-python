@@ -8,6 +8,7 @@ import time
 
 from exception import ConstructorError
 from exception import OperationError
+from exception import NotcallableError
 from util import Util
 
 logger = Util.getLogger(__name__)
@@ -24,30 +25,54 @@ class Engine:
             self.__channel = None
             self.__thread = None
 
-            if ('exchange_name' in params):
-                self.__exchangeName = params['exchange_name']
+            if ('exchangeName' in params):
+                self.__exchangeName = params['exchangeName']
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('exchange_name value: %s' % self.__exchangeName)
+                    logger.debug('exchangeName value: %s' % self.__exchangeName)
             else:
                 self.__exchangeName = None
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('exchange_name is empty')
+                    logger.debug('exchangeName is empty')
 
-            if ('exchange_type' in params):
-                self.__exchangeType = params['exchange_type']
+            if ('exchangeType' in params):
+                self.__exchangeType = params['exchangeType']
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('exchange_type value: %s' % self.__exchangeType)
+                    logger.debug('exchangeType value: %s' % self.__exchangeType)
             else:
                 self.__exchangeType = 'direct'
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('exchange_type is empty, use default')
+                    logger.debug('exchangeType is empty, use "direct" as default')
+
+            if ('exchangeDurable' in params) and type(params['exchangeDurable']) is bool:
+                self.__exchangeDurable = params['exchangeDurable']
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('exchangeDurable value: %s' % self.__exchangeDurable)
+            else:
+                self.__exchangeDurable = True
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('exchangeDurable is empty, use True as default')
 
             if (self.__exchangeName != None and self.__exchangeType != None):
                 channel = self.__getChannel()
-                channel.exchange_declare(exchange=self.__exchangeName, type=self.__exchangeType, durable=True)
+                channel.exchange_declare(exchange=self.__exchangeName,
+                                         type=self.__exchangeType,
+                                         durable=self.__exchangeDurable)
             
-            if ('routing_key' in params):
-                self.__routingKey = params['routing_key']
+            if ('routingKey' in params):
+                self.__routingKey = params['routingKey']
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('routingKey value: %s' % self.__routingKey)
+            else:
+                self.__routingKey = None
+
+            if ('otherKeys' in params) and (type(otherKeys) is str):
+                self.__otherKeys = params['otherKeys'].split(',')
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('otherKeys value: %s' % self.__otherKeys)
+            else:
+                self.__otherKeys = []
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('otherKeys is empty, use [] as default')
 
             if ('applicationId' in params):
                 self.__applicationId = params['applicationId']
@@ -111,13 +136,21 @@ class Engine:
                     channel.basic_nack(delivery_tag=method.delivery_tag,multiple=False,requeue=True)
                     return
 
-                callback(channel, method, properties, body, _replyToName)
+                captured = callback(channel, method, properties, body, _replyToName)
+                
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('Request[%s] invoke Ack(%s, False)) / ConsumerTag[%s]' % 
                         (requestID, method.delivery_tag, method.consumer_tag))
-                channel.basic_ack(delivery_tag=method.delivery_tag,multiple=False)
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('Request[%s] has finished successfully' % (requestID))
+                
+                if captured:
+                    channel.basic_ack(delivery_tag=method.delivery_tag,multiple=False)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug('Request[%s] has finished successfully' % (requestID))
+                else:
+                    channel.basic_nack(delivery_tag=method.delivery_tag,multiple=False,requeue=True)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug('Request[%s] has not matched the criteria, skipped' % (requestID))
+
             except:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('Request[%s] has failed. Rejected but service still alive' % (requestID))
@@ -132,6 +165,26 @@ class Engine:
             'fixedQueue': _fixedQueue,'consumerTag': _consumerTag }
 
         return _consumerInfo
+
+    def acquireChannel(self, operator):
+        if not callable(operator):
+            if logger.isEnabledFor(logging.ERROR):
+                logger.error('channelOperator is not callable')
+            raise NotcallableError('operator should be a function')
+        channel = self.__connection.channel()
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug('temporary channel has been created')
+        output = None
+        try:
+            output = operator(channel=channel)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug('channel_operator has been invoked successfully')
+        finally:
+            if channel is not None and channel.is_open:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('temporary channel will be closed')
+                channel.close()
+        return output
 
     def cancelConsumer(self, consumerInfo=None):
         if consumerInfo is None: return
