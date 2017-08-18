@@ -113,8 +113,16 @@ class Engine:
             logger.debug('_queueName after run queue_declare(): %s' % _queueName)
 
         if (('binding' not in options or options['binding'] != False) and (self.__exchangeName != None)):
-            self.__channel.queue_bind(exchange=self.__exchangeName,
-                routing_key=self.__routingKey, queue=_queueName)
+            if self.__routingKey is not None:
+                self.__bindExchange(channel=self.__channel,
+                        exchangeName=self.__exchangeName,
+                        queueName=_queueName,
+                        routingKeys=[self.__routingKey])
+            if type(self.__otherKeys) is list and len(self.__otherKeys) > 0:
+                self.__bindExchange(channel=self.__channel,
+                        exchangeName=self.__exchangeName,
+                        queueName=_queueName,
+                        routingKeys=self.__otherKeys)
 
         _replyToName = None
         if ('replyTo' in options and options['replyTo'] is not None):
@@ -204,6 +212,13 @@ class Engine:
         if self.__channel is None:
             self.__channel = self.__connection.channel()
         return self.__channel
+
+    def __bindExchange(self, channel, exchangeName, queueName, routingKeys):
+        channel.exchange_declare(exchange=exchangeName, passive=True)
+        channel.queue_declare(queue=queueName, passive=True)
+        for routingKey in routingKeys:
+            channel.queue_bind(exchange=exchangeName, queue=queueName, routing_key=routingKey)
+        pass
 
     def __start_consuming(self):
         def startConsumer():
