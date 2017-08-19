@@ -2,7 +2,6 @@
 
 import logging
 import pika
-import time
 
 from engine import Engine
 from executor import Executor

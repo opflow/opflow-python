@@ -9,6 +9,7 @@ __copyright__ = 'Copyright 2017 Devebot <contact@devebot.com>'
 
 from opflow.engine import Engine
 from opflow.executor import Executor
+from opflow.pubsub import PubsubHandler
 from opflow.rpc_master import RpcMaster
 from opflow.rpc_worker import RpcWorker
 

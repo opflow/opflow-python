@@ -131,6 +131,11 @@ class Engine:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug('_replyToName after check: %s' % _replyToName)
 
+        _noAck = True
+        if ('noAck' in options and type(options['noAck']) is bool):
+            _noAck = options['noAck']
+        if logger.isEnabledFor(logging.DEBUG): logger.debug('_noAck: %s' % _noAck)
+
         def rpcCallback(channel, method, properties, body):
             requestID = Util.getRequestId(properties.headers, False)
             if logger.isEnabledFor(logging.DEBUG):
@@ -141,29 +146,27 @@ class Engine:
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug('Request[%s] received app_id:%s, but accepted app_id:%s, rejected' % 
                             (requestID, properties.app_id, self.__applicationId))
-                    channel.basic_nack(delivery_tag=method.delivery_tag,multiple=False,requeue=True)
-                    return
-
-                captured = callback(channel, method, properties, body, _replyToName)
-                
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('Request[%s] invoke Ack(%s, False)) / ConsumerTag[%s]' % 
-                        (requestID, method.delivery_tag, method.consumer_tag))
-                
-                if captured:
-                    channel.basic_ack(delivery_tag=method.delivery_tag,multiple=False)
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug('Request[%s] has finished successfully' % (requestID))
                 else:
-                    channel.basic_nack(delivery_tag=method.delivery_tag,multiple=False,requeue=True)
+                    captured = callback(channel, method, properties, body, _replyToName)
                     if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug('Request[%s] has not matched the criteria, skipped' % (requestID))
-
-            except:
+                        logger.debug('Request[%s] invoke Ack(%s, False)) / ConsumerTag[%s]' % 
+                            (requestID, method.delivery_tag, method.consumer_tag))
+                    if captured:
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug('Request[%s] has finished successfully' % (requestID))
+                    else:
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug('Request[%s] has not matched the criteria, skipped' % (requestID))
+                if not _noAck:
+                    channel.basic_ack(delivery_tag=method.delivery_tag,multiple=False)
+            except Exception as exception:
                 if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('Request[%s] is broken by exception: %s' % (requestID, exception.__class__.__name__))
                     logger.debug('Request[%s] has failed. Rejected but service still alive' % (requestID))
+                if not _noAck:
+                    channel.basic_ack(delivery_tag=method.delivery_tag,multiple=False)
 
-        _consumerTag = _channel.basic_consume(rpcCallback, queue=_queueName, no_ack=False)
+        _consumerTag = _channel.basic_consume(rpcCallback, queue=_queueName, no_ack=_noAck)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug('_consumerTag after run basic_consume(): %s' % _consumerTag)
 

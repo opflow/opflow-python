@@ -5,7 +5,6 @@ import pika
 import Queue
 import time
 import threading
-import uuid
 
 from engine import Engine
 from executor import Executor
