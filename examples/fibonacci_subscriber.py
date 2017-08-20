@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 
 import json
@@ -16,6 +15,8 @@ import opflow
 
 subscriber = opflow.PubsubHandler(**{
     'uri': 'amqp://master:zaq123edcx@192.168.56.56/',
+    'exchangeName': 'tdd-opflow-publisher',
+    'routingKey': 'tdd-opflow-pubsub-public',
     'subscriberName': 'tdd-opflow-subscriber',
     'recyclebinName': 'tdd-opflow-recyclebin',
     'applicationId': 'FibonacciGenerator'
