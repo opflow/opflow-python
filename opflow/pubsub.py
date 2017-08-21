@@ -6,6 +6,8 @@ import pika
 from engine import Engine
 from executor import Executor
 from util import Util
+from exception import OperationError
+from exception import ParameterError
 
 logger = Util.getLogger(__name__)
 
@@ -21,6 +23,7 @@ class PubsubHandler:
             'applicationId': applicationId
         })
         self.__executor = Executor({ 'engine': self.__engine })
+        self.__listener = None
 
         if subscriberName is not None and type(subscriberName) is str:
             self.__subscriberName = subscriberName
@@ -53,6 +56,11 @@ class PubsubHandler:
         self.__engine.produce(message=data, properties=properties, override=override)
 
     def subscribe(self, pubsubListener):
+        self.__listener = pubsubListener if (self.__listener is None) else self.__listener
+        if self.__listener is None:
+            raise ParameterError('Subscriber callback should not be None')
+        elif self.__listener != pubsubListener:
+            raise ParameterError('PubsubHandler only supports single Subscriber callback')
         def opflowListener(channel, method, properties, body, replyToName):
             headers = properties.headers
             requestId = Util.getRequestId(headers)

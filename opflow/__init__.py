@@ -16,3 +16,4 @@ from opflow.rpc_worker import RpcWorker
 from opflow.exception import ConstructorError
 from opflow.exception import OperationError
 from opflow.exception import NotcallableError
+from opflow.exception import ParameterError
