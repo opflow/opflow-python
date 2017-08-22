@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)) + '/..')
 
 import opflow
 
-master = opflow.RpcMaster({
+master = opflow.RpcMaster(**{
 	'uri': 'amqp://master:zaq123edcx@192.168.56.56/',
 	'exchangeName': 'tdd-opflow-exchange',
 	'routingKey': 'tdd-opflow-rpc',

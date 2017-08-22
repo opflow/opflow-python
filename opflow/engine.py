@@ -14,9 +14,9 @@ from util import Util
 logger = Util.getLogger(__name__)
 
 class Engine:
-    def __init__(self, params):
-        if 'uri' in params and type(params['uri']) is str and params['uri'] is not None:
-            self.__uri = params['uri']
+    def __init__(self, **kwargs):
+        if 'uri' in kwargs and type(kwargs['uri']) is str and kwargs['uri'] is not None:
+            self.__uri = kwargs['uri']
         else:
             raise ConstructorError('"uri" not found or not a string')
 
@@ -25,8 +25,8 @@ class Engine:
             self.__channel = None
             self.__thread = None
 
-            if ('exchangeName' in params):
-                self.__exchangeName = params['exchangeName']
+            if ('exchangeName' in kwargs):
+                self.__exchangeName = kwargs['exchangeName']
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('exchangeName value: %s' % self.__exchangeName)
             else:
@@ -34,8 +34,8 @@ class Engine:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('exchangeName is empty')
 
-            if ('exchangeType' in params):
-                self.__exchangeType = params['exchangeType']
+            if ('exchangeType' in kwargs):
+                self.__exchangeType = kwargs['exchangeType']
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('exchangeType value: %s' % self.__exchangeType)
             else:
@@ -43,8 +43,8 @@ class Engine:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('exchangeType is empty, use "direct" as default')
 
-            if ('exchangeDurable' in params) and type(params['exchangeDurable']) is bool:
-                self.__exchangeDurable = params['exchangeDurable']
+            if ('exchangeDurable' in kwargs) and type(kwargs['exchangeDurable']) is bool:
+                self.__exchangeDurable = kwargs['exchangeDurable']
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('exchangeDurable value: %s' % self.__exchangeDurable)
             else:
@@ -58,26 +58,35 @@ class Engine:
                                          type=self.__exchangeType,
                                          durable=self.__exchangeDurable)
             
-            if ('routingKey' in params):
-                self.__routingKey = params['routingKey']
+            if 'routingKey' in kwargs:
+                self.__routingKey = kwargs['routingKey']
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('routingKey value: %s' % self.__routingKey)
             else:
                 self.__routingKey = None
 
-            if ('otherKeys' in params) and (type(otherKeys) is str):
-                self.__otherKeys = params['otherKeys'].split(',')
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug('otherKeys value: %s' % self.__otherKeys)
+            if 'otherKeys' in kwargs:
+                if type(kwargs['otherKeys']) is str:
+                    self.__otherKeys = kwargs['otherKeys'].split(',')
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug('otherKeys value: %s' % self.__otherKeys)
+                if type(kwargs['otherKeys']) is list:
+                    self.__otherKeys = kwargs['otherKeys']
             else:
                 self.__otherKeys = []
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug('otherKeys is empty, use [] as default')
 
-            if ('applicationId' in params):
-                self.__applicationId = params['applicationId']
+            if 'applicationId' in kwargs and type(kwargs['applicationId']) is str:
+                self.__applicationId = kwargs['applicationId']
             else:
                 self.__applicationId = None
+            
+            if ('verbose' in kwargs) and type(kwargs['verbose']) is bool:
+                self.__verbose = kwargs['verbose']
+            else:
+                self.__verbose = False
+
         except:
             raise ConstructorError('Error on connecting or exchange declaration')
 
@@ -208,6 +217,10 @@ class Engine:
             self.__connection.close()
 
     @property
+    def verbose(self):
+        return self.__verbose
+
+    @property
     def consumingLoop(self):
         return self.__thread
 
@@ -224,19 +237,23 @@ class Engine:
         pass
 
     def __start_consuming(self):
+        _LOOP_DATA_EVENTS = 0.01
         def startConsumer():
-            # if logger.isEnabledFor(logging.DEBUG):
-            #    logger.debug('invoke connection.process_data_events()')
-            self.__connection.process_data_events(0.01)
+            self.__connection.process_data_events(_LOOP_DATA_EVENTS)
 
         if self.__thread is None:
+            if self.__verbose and logger.isEnabledFor(logging.DEBUG):
+                logger.debug('start thread invoke connection.process_data_events(%s)' % (_LOOP_DATA_EVENTS))
             self.__thread = StoppableThread(target=startConsumer,name='ConsumingThread')
             self.__thread.start()
 
     def __stop_consuming(self):
+        _WAIT_THREAD_STOP = 0.5
         if self.__thread is not None:
+            if self.__verbose and logger.isEnabledFor(logging.DEBUG):
+                logger.debug('stop thread in (%s) seconds' % (_WAIT_THREAD_STOP))
             self.__thread.stop()
-            time.sleep(0.5)
+            time.sleep(_WAIT_THREAD_STOP)
 
 
 class StoppableThread(threading.Thread):

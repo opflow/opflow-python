@@ -13,16 +13,18 @@ logger = Util.getLogger(__name__)
 
 class PubsubHandler:
     def __init__(self, uri, exchangeName=None, exchangeType='direct',
-            routingKey=None, otherKeys=[], applicationId=None,
+            routingKey=None, otherKeys=[], applicationId=None, verbose=False,
             subscriberName=None, recyclebinName=None, redeliveredLimit=3):
-        self.__engine = Engine({
+        self.__engine = Engine(**{
             'uri': uri, 
             'exchangeName': exchangeName,
             'exchangeType': exchangeType,
             'routingKey': routingKey,
-            'applicationId': applicationId
+            'otherKeys': otherKeys,
+            'applicationId': applicationId,
+            'verbose': verbose
         })
-        self.__executor = Executor({ 'engine': self.__engine })
+        self.__executor = Executor(engine=self.__engine)
         self.__listener = None
 
         if subscriberName is not None and type(subscriberName) is str:
@@ -100,10 +102,12 @@ class PubsubHandler:
             self.__engine.close()
 
     def retain(self):
+        _CONSUMING_LOOP_INTERVAL = 1
         if self.__engine is not None:
             while self.__engine.consumingLoop is not None and self.__engine.consumingLoop.is_alive():
-                if logger.isEnabledFor(logging.DEBUG): logger.debug('waiting for consumingLoop')
-                self.__engine.consumingLoop.join(1)
+                if self.__engine.verbose and logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('consumingLoop interval: %s second(s)' % _CONSUMING_LOOP_INTERVAL)
+                self.__engine.consumingLoop.join(_CONSUMING_LOOP_INTERVAL)
 
     def __sendToQueue(self, content, properties, queueName, channel):
         try:

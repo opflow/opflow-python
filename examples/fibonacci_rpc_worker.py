@@ -14,7 +14,7 @@ from fibonacci_generator import FibonacciGenerator
 import opflow
 
 # def main():
-worker = opflow.RpcWorker({
+worker = opflow.RpcWorker(**{
     'uri': 'amqp://master:zaq123edcx@192.168.56.56/',
     'exchangeName': 'tdd-opflow-exchange',
     'routingKey': 'tdd-opflow-rpc',

@@ -14,9 +14,9 @@ from util import Util
 logger = Util.getLogger(__name__)
 
 class Executor:
-    def __init__(self, params):
-        if 'engine' in params and isinstance(params['engine'], Engine):
-            self.__engine = params['engine']
+    def __init__(self, engine):
+        if engine is not None and isinstance(engine, Engine):
+            self.__engine = engine
         else:
             raise ConstructorError('"engine" not found or not an Engine object')
 
