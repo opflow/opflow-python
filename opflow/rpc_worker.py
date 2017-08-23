@@ -2,9 +2,9 @@
 
 import logging
 import pika
-import time
 
 from engine import Engine
+from executor import Executor
 from util import Util
 from exception import ConstructorError
 from exception import OperationError
@@ -12,25 +12,33 @@ from exception import OperationError
 logger = Util.getLogger(__name__)
 
 class RpcWorker:
-    def __init__(self, params):
+    def __init__(self, uri, exchangeName=None, routingKey=None, applicationId=None,
+            operatorName=None, responseName=None, verbose=False):
         if logger.isEnabledFor(logging.DEBUG): logger.debug('Constructor begin ...')
-        self.__engine = Engine(params)
+        self.__engine = Engine(**{
+            'uri': uri, 
+            'exchangeName': exchangeName,
+            'exchangeType': 'direct',
+            'routingKey': routingKey,
+            'applicationId': applicationId,
+            'verbose': verbose
+        })
+        self.__executor = Executor(engine=self.__engine)
 
-        if ('operatorName' in params):
-            self.__operatorName = params['operatorName']
+        if operatorName is not None and type(operatorName) is str:
+            self.__operatorName = operatorName
+            self.__executor.assertQueue(self.__operatorName)
         else:
-            self.__operatorName = None
+            raise ConstructorError('operatorName should not be empty')
 
-        if ('responseName' in params):
-            self.__responseName = params['responseName']
+        if responseName is not None and type(responseName) is str:
+            self.__responseName = responseName
+            self.__executor.assertQueue(self.__responseName)
         else:
             self.__responseName = None
 
         self.__middlewares = []
         self.__consumerInfo = None
-
-        if self.__operatorName is None:
-            raise ConstructorError('operatorName should not be empty')
 
         if logger.isEnabledFor(logging.DEBUG): logger.debug('Constructor end!')
 
@@ -60,14 +68,17 @@ class RpcWorker:
         def workerCallback(channel, method, properties, body, replyToName):
             response = RpcResponse(channel, properties, method.consumer_tag, body, replyToName)
             routineId = Util.getRoutineId(properties.headers)
+            count = 0
             for middleware in self.__middlewares:
                 if (middleware['checker'](routineId)):
+                    count += 1
                     middleware['listener'](body, properties.headers, response)
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug('middleware matched, invoke callback')
                 else:
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug('middleware not matched, skipped')
+            return (count > 0)
 
         self.__consumerInfo = self.__engine.consume(workerCallback, {
             'binding': True,
@@ -86,10 +97,18 @@ class RpcWorker:
             self.__engine.close()
 
     def retain(self):
+        _CONSUMING_LOOP_INTERVAL = 1
         if self.__engine is not None:
             while self.__engine.consumingLoop is not None and self.__engine.consumingLoop.is_alive():
-                if logger.isEnabledFor(logging.DEBUG): logger.debug('waiting for consumingLoop')
-                self.__engine.consumingLoop.join(1)
+                if self.__engine.verbose and logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('consumingLoop interval: %s second(s)' % _CONSUMING_LOOP_INTERVAL)
+                self.__engine.consumingLoop.join(_CONSUMING_LOOP_INTERVAL)
+
+    @property
+    def executor(self):
+        if self.__executor is None:
+            self.__executor = Executor(engine=self.__engine)
+        return self.__executor
 
 class RpcResponse:
     def __init__(self, channel, properties, workerTag, body, replyToName):

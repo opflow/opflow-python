@@ -8,5 +8,12 @@ __license__ = 'MIT'
 __copyright__ = 'Copyright 2017 Devebot <contact@devebot.com>'
 
 from opflow.engine import Engine
+from opflow.executor import Executor
+from opflow.pubsub import PubsubHandler
 from opflow.rpc_master import RpcMaster
 from opflow.rpc_worker import RpcWorker
+
+from opflow.exception import ConstructorError
+from opflow.exception import OperationError
+from opflow.exception import NotcallableError
+from opflow.exception import ParameterError

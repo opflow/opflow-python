@@ -5,42 +5,57 @@ import pika
 import Queue
 import time
 import threading
-import uuid
 
 from engine import Engine
+from executor import Executor
 from task import TimeoutHandler
 from util import Util
 
 logger = Util.getLogger(__name__)
 
 class RpcMaster:
-    def __init__(self, params):
+    def __init__(self, uri, exchangeName=None, routingKey=None, applicationId=None,
+            responseName=None, verbose=False,
+            monitorEnabled=True, monitorId=None, monitorInterval=None, monitorTimeout=None):
         if logger.isEnabledFor(logging.DEBUG): logger.debug('Constructor begin ...')
         self.__lock = threading.RLock()
         self.__idle = threading.Condition(self.__lock)
-        self.__engine = Engine(params)
+        self.__engine = Engine(**{
+            'uri': uri, 
+            'exchangeName': exchangeName,
+            'exchangeType': 'direct',
+            'routingKey': routingKey,
+            'applicationId': applicationId,
+            'verbose': verbose
+        })
+        self.__executor = Executor(engine=self.__engine)
         self.__tasks = {}
-        self.__responseConsumer = None
-        self.__responseName = params['responseName']
         self.__timeoutHandler = None
+        self.__responseConsumer = None
 
-        if 'monitorEnabled' in params and type(params['monitorEnabled']) is bool:
-            self.__monitorEnabled = params['monitorEnabled']
+        if responseName is not None and type(responseName) is str:
+            self.__responseName = responseName
+            self.__executor.assertQueue(self.__responseName)
+        else:
+            self.__responseName = None
+
+        if monitorEnabled is not None and type(monitorEnabled) is bool:
+            self.__monitorEnabled = monitorEnabled
         else:
             self.__monitorEnabled = True
 
-        if 'monitorId' in params:
-            self.__monitorId = params['monitorId']
+        if monitorId is not None and type(monitorId) is str:
+            self.__monitorId = monitorId
         else:
             self.__monitorId = Util.getUUID()
 
-        if 'monitorInterval' in params and type(params['monitorInterval']) is int:
-            self.__monitorInterval = params['monitorInterval']
+        if monitorInterval is not None and type(monitorInterval) is int:
+            self.__monitorInterval = monitorInterval
         else:
             self.__monitorInterval = 1
 
-        if 'monitorTimeout' in params and type(params['monitorTimeout']) is int:
-            self.__monitorTimeout = params['monitorTimeout']
+        if monitorTimeout is not None and type(monitorTimeout) is int:
+            self.__monitorTimeout = monitorTimeout
         else:
             self.__monitorTimeout = 0
 
@@ -125,6 +140,8 @@ class RpcMaster:
             task.push({ 'content': body, 'headers': properties.headers })
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug('responseConsumer - task[%s] message enqueued' % (taskId))
+
+            return True
         
         options = { 'binding': False, 'prefetch': 1 }
         if (not forked):
@@ -156,6 +173,10 @@ class RpcMaster:
         if self.__engine is not None:
             while self.__engine.consumingLoop is not None and self.__engine.consumingLoop.is_alive():
                 self.__engine.consumingLoop.join(1)
+
+    @property
+    def executor(self):
+        return self.__executor
 
 class RpcRequest:
     EMPTY = { 'status': 'EMPTY' }

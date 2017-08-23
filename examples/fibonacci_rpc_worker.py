@@ -14,10 +14,10 @@ from fibonacci_generator import FibonacciGenerator
 import opflow
 
 # def main():
-worker = opflow.RpcWorker({
+worker = opflow.RpcWorker(**{
     'uri': 'amqp://master:zaq123edcx@192.168.56.56/',
-    'exchange_name': 'tdd-opflow-exchange',
-    'routing_key': 'tdd-opflow-rpc',
+    'exchangeName': 'tdd-opflow-exchange',
+    'routingKey': 'tdd-opflow-rpc',
     'operatorName': 'tdd-opflow-queue',
     'responseName': 'tdd-opflow-feedback',
     'applicationId': 'FibonacciGenerator'

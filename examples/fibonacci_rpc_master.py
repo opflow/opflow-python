@@ -12,13 +12,15 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)) + '/..')
 
 import opflow
 
-master = opflow.RpcMaster({
+master = opflow.RpcMaster(**{
 	'uri': 'amqp://master:zaq123edcx@192.168.56.56/',
-	'exchange_name': 'tdd-opflow-exchange',
-	'routing_key': 'tdd-opflow-rpc',
+	'exchangeName': 'tdd-opflow-exchange',
+	'routingKey': 'tdd-opflow-rpc',
 	'responseName': 'tdd-opflow-feedback',
 	'applicationId': 'FibonacciGenerator'
 })
+
+master.executor
 
 def signal_term_handler(signal, frame):
     print 'SIGTERM/SIGINT'
